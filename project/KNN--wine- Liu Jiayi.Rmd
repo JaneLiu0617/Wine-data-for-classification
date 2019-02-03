@@ -1,0 +1,260 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+## Classify the wine dataset with KNN
+# Step  1: Download data-----
+# Step 2: Exploring and preparing the data ----
+```{r}
+# import the CSV file
+wines<- read.csv("wines.csv")
+names(wines) <- c("label",
+                  "Alcohol",
+                  "Malic_acid",
+                  "Ash",
+                  "Alcalinity_of_ash",
+                  "Magnesium",
+                  "Total_phenols",
+                  "Flavanoids",
+                  "Nonflavanoid_phenols",
+                  "Proanthocyanins",
+                  "Color_intensity",
+                  "Hue",
+                  "OD280_OD315_of_diluted_wines",
+                  "Proline")
+head(wines)
+# examine the structure of the wbcd data frame
+#str(wines)
+```
+```{r}
+library(ggplot2)
+plt1 <- ggplot(wines, aes(x = Alcohol, y = Magnesium, colour = as.factor(label))) +
+geom_point(size=3) +
+ggtitle("Wines")
+plt2 <- ggplot(wines, aes(x = Alcohol, y = Proline, colour = as.factor(label))) +
+geom_point(size=3) +
+ggtitle("Wines")
+plt1
+plt2
+```
+
+
+
+```{r}
+# table of labels
+table(wines$label)
+
+# recode label as a factor
+wines$label <- factor(wines$label, levels = c("1","2","3"),
+                         labels = c("A", "B", "C"))
+
+# table or proportions with more informative labels
+round(prop.table(table(wines$label)) * 100, digits = 1)
+```
+```{r}
+# create normalization function
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+# normalize the wbcd data
+wines_n <- as.data.frame(lapply(wines[2:14], normalize))
+# add the label column
+wines_n$label<-as.factor(wines[,1])
+```
+
+```{r}
+# set up trainning and test data sets
+set.seed(3033)
+indx <- sample(1:nrow(wines_n), as.integer(0.7*nrow(wines_n)))
+#View(indx)
+#indx
+
+training <- wines_n[indx,1:13]
+testing <- wines_n[-indx,1:13]
+
+train_labels <- wines_n[indx,14]
+test_labels <- wines_n[-indx,14]  
+```
+```{r}
+trl<-wines_n[indx,]
+tel<-wines_n[-indx,]
+trl1<-wines[indx,]
+tel1<-wines[-indx,]
+```
+
+```{r}
+# check missing data
+anyNA(training)
+anyNA(testing)
+```
+
+# Step 3: Training a model on the data ----
+```{r}
+# load the "class" library
+library(class)
+
+test_pred <- knn(train = training[1:13], test = testing[1:13],
+                      cl = train_labels, k = 4)
+
+head(testing)
+head(test_pred)
+
+```
+# Step 4: Evaluating model performance ----
+```{r}
+# load the "gmodels" library
+library(gmodels)
+
+# Create the cross tabulation of predicted vs. actual
+CrossTable(x = test_labels, y = test_pred,
+           prop.chisq = FALSE)
+#we can see the error is not very high, only 2 mistake.
+```
+# Step 5: Improving model performance ----
+```{r}
+# use the scale() function to z-score standardize a data frame
+wines_z <- as.data.frame(scale(wines[2:14]))
+# add the label column
+wines_z$label<-as.factor(wines[,1])
+```
+
+```{r}
+# set up trainning and test data sets
+set.seed(3033)
+indx <- sample(1:nrow(wines_z), as.integer(0.7*nrow(wines_z)))
+#indx
+
+training1 <- wines_z[indx,1:13]
+testing1 <- wines_z[-indx,1:13]
+
+train_labels1 <- wines_z[indx,14]
+test_labels1 <- wines_z[-indx,14]  
+```
+```{r}
+# check missing data
+anyNA(training1)
+anyNA(testing1)
+```
+```{r}
+#start time
+strt<-Sys.time()
+
+test_pred <- knn(train = training[1:13], test = testing[1:13], cl = train_labels, k = 1)
+CrossTable(x = test_labels, y = test_pred,prop.chisq = FALSE)
+
+test_pred <- knn(train = training[1:13], test = testing[1:13], cl = train_labels, k=4)
+CrossTable(x = test_labels, y = test_pred, prop.chisq=FALSE)
+
+test_pred <- knn(train = training[1:13], test = testing[1:13], cl = train_labels, k = 8)
+CrossTable(x = test_labels, y = test_pred,prop.chisq = FALSE)
+
+test_pred <- knn(train = training[1:13], test = testing[1:13], cl = train_labels, k=12)
+CrossTable(x = test_labels, y = test_pred, prop.chisq=FALSE)
+
+test_pred <- knn(train = training[1:13], test = testing[1:13], cl = train_labels, k = 14)
+CrossTable(x = test_labels, y = test_pred,prop.chisq = FALSE)
+
+test_pred <- knn(train = training[1:13], test = testing[1:13], cl = train_labels, k=20)
+CrossTable(x = test_labels, y = test_pred, prop.chisq=FALSE)
+
+
+#end time
+print(Sys.time()-strt)
+# we find the best is 1 mistake improve our model when k=12 and 14.
+```
+##############################
+# Use library(caret) to train the model KNN
+```{r}
+library(tidyr)
+library(dplyr)
+library(Rcpp)
+library(ggplot2)
+library(caret)
+
+trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+set.seed(3333)
+knn_fit <- train(label ~., data = trl, method = "knn",
+trControl=trctrl,
+preProcess = c("center", "scale"),
+tuneLength = 10)
+knn_fit
+#k = 21, give the best accurarcy=0.97 and Kappa=0.95
+```
+
+```{r}
+# use the model to test the testing data
+knnPredict <- predict(knn_fit,newdata = tel )
+#Get the confusion matrix to see accuracy value and other parameter values
+confusionMatrix(knnPredict, tel$label )
+# only 3 B mistaked as A, not very high for the testing data. Also, the accurarcy is 0.9444 and the Kappa is 0.916
+```
+
+
+```{r}
+library(ranger)
+library(randomForest)
+library(caret)
+library(randomForest)
+set.seed(3033)
+rf <- randomForest(label ~ ., data = trl)
+rf
+library(caret)
+ctrl <- trainControl(method = "repeatedcv",
+                     number = 10, repeats = 10)
+
+# auto-tune a random forest
+grid_rf <- expand.grid(.mtry = c(1,2,4,6))
+
+set.seed(300)
+m_rf <- train(label ~ ., data = trl, method = "rf",
+              metric = "Kappa", trControl = ctrl,
+              tuneGrid = grid_rf)
+m_rf
+
+#mtry = 1, Accurart is 0.9821404 and kappa is 0.9730934
+```
+
+
+```{r}
+rfPredict <- predict(m_rf,newdata = tel )
+confusionMatrix(rfPredict, tel$label )
+# we find that the accuray is 1 and kappa is 1, excellent.
+```
+############### try to compare with C5.0 
+```{r}
+library(broom)
+library(tidyr)
+library(caret)
+library(tictoc)
+library(lattice)
+library(ggplot2)
+library(ranger)
+library(h2o)
+library(stats)
+library(base)
+library(randomForest)
+```
+
+```{r}
+### c5.0 tree to give the first model and result
+set.seed(300)
+m <- train(label ~ ., data = trl1, method = "C5.0")
+m
+```
+```{r}
+p <- predict(m, trl1)
+confusionMatrix(data=p, trl1$label)
+```
+```{r}
+rp <- predict(m, tel1)
+confusionMatrix(data=rp, tel1$label)
+```
+
