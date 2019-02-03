@@ -1,0 +1,2 @@
+•	Process raw data for analysis by detecting the patterns, draw relative plots and check noise data
+•	Apply above three machine learning algorithms with different packages(C5.0, h2o, caret and randomForest) and use cross table and accuracy criteria to evaluate models
